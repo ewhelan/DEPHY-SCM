@@ -87,6 +87,15 @@ cases.append(case)
 subcases[case] = ['REF']
 
 ####################################
+#### Supercooled Liquid academic cases
+
+# ENGDAHL cases
+case = 'ENGDAHL'
+cases.append(case)
+subcases[case] = ['SCLD', 'SCLO']
+
+
+####################################
 #### Stratocumulus cases
 
 # FIRE case
