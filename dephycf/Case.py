@@ -46,12 +46,13 @@ endDate0 = datetime(1979,1,1,0,0,0)
 init_vars_1D = ['ps','ts','thetas']
 forc_vars_1D = ['ps_forc','hfss','hfls','ustar',\
                 'ts_forc','thetas_forc','tskin',\
-                'orog','lat','lon','z0','z0h','z0q','beta','alb','emis']
+                'orog','lat','lon','z0','z0h','z0q','beta','alb','emis','i0','sza']
 
 class Case:
 
     def __init__(self, caseid,
             lat=None, lon=None,
+            case_type="standard",
             startDate=startDate0, endDate=endDate0,
             surfaceType='ocean', zorog=0.,
             forcing_scale=-1):
@@ -63,6 +64,9 @@ class Case:
         # Latitude (degrees_noth) and Longitude (degrees_east)
         self.lat = lat
         self.lon = lon
+
+        # case type
+        self.case_type = case_type
 
         # Surface type
         self.surface_type = surfaceType
@@ -77,6 +81,7 @@ class Case:
 
         # Attributes
         self.attlist = ['case','title','reference','author','version','format_version','modifications','script','comment',
+                'case_type',
                 'start_date','end_date',
                 'forcing_scale',
                 'radiation','shallow_convection','turbulence',
@@ -92,6 +97,7 @@ class Case:
                 'modifications': "",
                 'script': "",
                 'comment': "",
+                'case_type': self.case_type,
                 'start_date': self.start_date.strftime('%Y-%m-%d %H:%M:%S'),
                 'end_date': self.end_date.strftime('%Y-%m-%d %H:%M:%S'),
                 'forcing_scale': self.forcing_scale,
@@ -194,6 +200,10 @@ class Case:
 
         self.attributes['script'] = script
 
+    def set_case_type(self,case_type):
+
+        self.attributes['case_type'] = case_type
+
 ###################################################################################################
 #                  Generic removal/addition of a variable
 ###################################################################################################
@@ -216,7 +226,8 @@ class Case:
 
     def add_variable(self, varid, vardata, name=None, units=None,
             lev=None, levtype=None, levid=None,
-            height=None, pressure=None,
+            height=None, height_id=None, height_units=None,
+            pressure=None, pressure_id=None, pressure_units=None,
             time=None, timeid=None):
         """Add a variable to a Case object.
             
@@ -294,12 +305,6 @@ class Case:
                 levAxis = Axis('lev_{0}'.format(varid),lev,name=lev_name,units=levunits)
             else:
                 levAxis = Axis(levid,lev,name='{0}'.format(levtype),units=levunits)
-
-        height_id = None
-        height_units = None
-
-        pressure_id = None
-        pressure_units = None
 
         if levAxis is not None:
             if levtype == 'altitude':
@@ -565,6 +570,7 @@ class Case:
 
         See add_variable function for optional arguments.
         Note that:
+        - hur has no units
         - a level axis is required (lev optional argument).
         - a levtype is required (levtype optional argument).
         """
@@ -572,6 +578,11 @@ class Case:
             logger.error('Metpy library is not available')
             logger.error('Relative humidity cannot be used as an initial variable')
             raise NotImplementedError
+
+        if np.max(vardata) > 1:
+            logger.error('The given relative humidity has values greater than 1: ' + str(np.max(vardata)))
+            logger.error('Relative humidity should be given with no units, not in %')
+            raise ValueError
 
         self.set_attribute('ini_hur',1)
         self.add_init_variable('hur',vardata,**kwargs)
@@ -1030,6 +1041,29 @@ class Case:
 
         self.add_forcing_variable('tnqv_adv',data,**kwargs)
 
+    def add_wind_advection(self,ua_adv=None, va_adv=None,**kwargs):
+        """ 
+        Add a wind advection to a Case object.
+        
+        Required argument:
+        data -- input data as a list or a numpy array.
+
+        See add_variable function for optional arguments.
+        Note that:
+        - a level axis is required (lev optional argument).
+        - a levtype is required (levtype optional argument).
+
+        If time is not provided, forcing is assumed constant in time.
+        """
+        
+        if ua_adv is not None:
+            self.add_forcing_variable('tnua_adv', ua_adv, **kwargs)
+        if va_adv is not None:
+            self.add_forcing_variable('tnva_adv', va_adv, **kwargs)
+
+        self.set_attribute('adv_ua',1)
+        self.set_attribute('adv_va',1)
+
     def add_qt_advection(self,data,**kwargs):
         """Add a total water advection to a Case object.
         
@@ -1404,6 +1438,20 @@ class Case:
 
         self.add_forcing_variable('tskin',data,**kwargs)
 
+    def add_rad_ts(self,data,**kwargs):
+        """Add a surface temperature for radiation to a Case object.
+        
+        This function sets a surface temperature for the radiation scheme.
+
+        Required argument:
+        data -- input data as a list or a numpy array.
+
+        If time is not provided, temperature is assumed constant in time.
+        """
+
+        self.set_attribute('surface_radiation_temp','ts')
+        self.add_forcing_variable('ts_forc',data,**kwargs)
+
     def add_forcing_ts(self,data,z0=None,z0h=None,z0q=None,**kwargs):
         """Add a surface temperature forcing to a Case object.
         
@@ -1420,7 +1468,7 @@ class Case:
         self.add_forcing_variable('ts_forc',data,**kwargs)
 
         if 'ts' not in self.var_init_list:
-            if isinstance(data,float):
+            if isinstance(data,float) or isinstance(data,int):
                 self.add_init_ts(data,**kwargs)
             else:
                 self.add_init_ts(data[0],**kwargs)
@@ -1695,8 +1743,8 @@ class Case:
                 logger.error('Pressure should be None to theta from ta')
                 raise ValueError('Pressure should be None to theta from ta')
             else:
-                 logger.info('Compute potential temperature from pressure and temperature')
-                 theta = thermo.t2theta(p=pressure.data[0,:], temp=self.variables['ta'].data[0,:])
+                logger.info('Compute potential temperature from pressure and temperature')
+                theta = thermo.t2theta(p=pressure.data[0,:], temp=self.variables['ta'].data[0,:])
         elif 'thetal' in self.var_init_list:
             logger.info('Assume theta=thetal')
             theta = self.variables['thetal'].data[0,:]
@@ -1887,7 +1935,7 @@ class Case:
             logger.error('Either qv, qt or rv should be defined to compute hur')
             raise ValueError('Either qv, qt or rv should be defined to compute hur')
 
-        return rt
+        return hur
 
     def compute_tnta_adv(self):
 
@@ -2344,8 +2392,29 @@ class Case:
             elif levtype == 'pressure':
 
                 levout = Axis('lev', lev, name='air_pressure', units='Pa')
-                logger.error('Pressure level type is not coded yet for interpolation')
-                raise NotImplementedError('Pressure level type is not coded yet for interpolation')
+                for var in self.var_init_list:
+                    VV = dataout[var]
+                    dataout[var] = VV.interpol_vert(pressure=lev)
+                    if dataout[var].level is not None:
+                        dataout[var].set_level(lev=levout)
+                        dataout[var].pressure.set_level(lev=levout)
+                        dataout[var].pressure.id = 'pa'
+                        dataout[var].pressure.name = 'pressure'
+                        dataout[var].set_coordinates('t0','pa','lat','lon')
+                        dataout[var].pressure.set_coordinates('t0','pa','lat','lon')
+
+                for var in self.var_forcing_list:
+                    VV = dataout[var]
+                    dataout[var] = VV.interpol_vert(pressure=lev)
+                    if dataout[var].level is not None:
+                        dataout[var].set_level(lev=levout)
+                        dataout[var].pressure.set_level(lev=levout)
+                        dataout[var].pressure.id = 'pa_forc'
+                        dataout[var].pressure.name = 'pressure_forcing'
+                        dataout[var].set_coordinates('time','pa_forc','lat','lon')
+                        dataout[var].pressure.set_coordinates('time','pa_forc','lat','lon')
+                #logger.error('Pressure level type is not coded yet for interpolation')
+                #raise NotImplementedError('Pressure level type is not coded yet for interpolation')
 
             else:
 
@@ -2705,6 +2774,28 @@ class Case:
                     height=height, pressure=pressure)
                 self.set_attribute('adv_rt',1)
 
+        #---- Large-scale wind advection
+        atts = ['adv_ua', 'adv_va']
+        flag = False
+        for att in atts:
+            if att in self.attlist and self.attributes[att] == 1:
+                flag = True
+
+        if flag:
+            # large-scale advection of humidity is active. All humidity variables are added, if needed.
+            if 'tnua_adv' not in self.var_forcing_list:
+                uaadv = self.variables['tnua_adv'].data
+                self.add_variable('tnua_adv', uaadv,
+                                  lev=level, time=time,
+                                  height=height, pressure=pressure)
+                self.set_attribute('adv_ua', 1)
+            if 'tnva_adv' not in self.var_forcing_list:
+                vaadv = self.variables['tnva_adv'].data
+                self.add_variable('tnva_adv', vaadv,
+                                  lev=level, time=time,
+                                  height=height, pressure=pressure)
+                self.set_attribute('adv_va', 1)
+
         #---- Wind nudging
 
         for var in ['ua','va']:
@@ -3043,6 +3134,10 @@ class Case:
                 logger.error('shape unexpected for data : {0}'.format(data.shape))
                 raise ValueError
 
+    def extend_init_pressure(self, pa=None, **kwargs):
+        """Vertically extend the pressure"""
+
+        self.extend_variable('pa', data=pa, **kwargs)
 
     def extend_init_wind(self, u=None, v=None, **kwargs):
         """Vertically extend the two wind initial components"""
@@ -3136,6 +3231,12 @@ class Case:
         """Vertically extend the water vapor mixing ratio large-scale advection"""
 
         self.extend_variable('tnrv_adv', data=rv_adv, **kwargs)
+
+    def extend_wind_advection(self, ua_adv=None, va_adv=None, **kwargs):
+        """Vertically extend the two wind initial components"""
+
+        self.extend_variable('tnua_adv', data=ua_adv, **kwargs)
+        self.extend_variable('tnva_adv', data=va_adv, **kwargs)
 
     def extend_rt_advection(self, rt_adv=None, **kwargs):
         """Vertically extend the total water mixing ratio large-scale advection"""
