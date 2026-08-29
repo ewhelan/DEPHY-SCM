@@ -84,7 +84,7 @@ class Case:
                 'case_type',
                 'start_date','end_date',
                 'forcing_scale',
-                'radiation',
+                'radiation','shallow_convection','turbulence',
                 'surface_type','surface_forcing_temp','surface_forcing_moisture','surface_forcing_wind'
                 ]
         self.attributes = {
@@ -102,6 +102,8 @@ class Case:
                 'end_date': self.end_date.strftime('%Y-%m-%d %H:%M:%S'),
                 'forcing_scale': self.forcing_scale,
                 'radiation': 'on',
+                'shallow_convection': 'on',
+                'turbulence': 'on',
                 'surface_type': self.surface_type,
                 'surface_forcing_temp': 'none',
                 'surface_forcing_moisture': 'none',
@@ -110,7 +112,7 @@ class Case:
 
         for att in set(required_attributes).difference(set(self.attlist)):
             self.attlist.append(att)
-            if att in ['surface_type','surface_forcing_temp','surface_forcing_moisture','surface_forcing_wind','radiation']:
+            if att in ['surface_type','surface_forcing_temp','surface_forcing_moisture','surface_forcing_wind','radiation','shallow_convection','turbulence']:
                 self.attributes[att] = ""
             else:
                 self.attributes[att] = 0
@@ -1375,6 +1377,38 @@ class Case:
         """
 
         self.set_attribute('radiation',"off")
+
+    def activate_shallow_convection(self):
+        """Activate shallow convection in a Case object
+
+        No argument required.
+        """
+
+        self.set_attribute('shallow_convection',"on")
+
+    def deactivate_shallow_convection(self):
+        """Deactivate shallow convection in a Case object
+
+        No argument required.
+        """
+
+        self.set_attribute('shallow_convection',"off")
+
+    def activate_turbulence(self):
+        """Activate turbulence in a Case object
+
+        No argument required.
+        """
+
+        self.set_attribute('turbulence',"on")
+
+    def deactivate_turbulence(self):
+        """Deactivate turbulence in a Case object
+
+        No argument required.
+        """
+
+        self.set_attribute('turbulence',"off")
 
     def add_surface_temp(self,data,**kwargs):
         """Add a surface temperature forcing to a Case object.
